@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Returns the L1 loss between predictions and expectations.
+/// Computes the L1 loss between `expected` and `predicted`.
+/// `loss = reduction(abs(expected - predicted))`
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
@@ -20,14 +21,15 @@
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: predicted)
 public func l1Loss<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _sum
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _sum
 ) -> Tensor<Scalar> {
-    reduction(abs(expected - predicted))
+  reduction(abs(expected - predicted))
 }
 
-/// Returns the L2 loss between predictions and expectations.
+/// Computes the L2 loss between `expected` and `predicted`.
+/// `loss = reduction(square(expected - predicted))`
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
@@ -35,40 +37,43 @@ public func l1Loss<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: predicted)
 public func l2Loss<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _sum
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _sum
 ) -> Tensor<Scalar> {
-    reduction((expected - predicted).squared())
+  reduction((expected - predicted).squared())
 }
 
-/// Returns the mean absolute error between predictions and expectations.
+/// Computes the mean of absolute difference between labels and predictions.
+/// `loss = mean(abs(expected - predicted))`
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
 ///   - expected: Expected values, i.e. targets, that correspond to the correct output.
 @differentiable(wrt: predicted)
 public func meanAbsoluteError<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>
 ) -> Tensor<Scalar> {
-    l1Loss(predicted: predicted, expected: expected, reduction: _mean)
+  l1Loss(predicted: predicted, expected: expected, reduction: _mean)
 }
 
-/// Returns the mean squared error between predictions and expectations.
+/// Computes the mean of squares of errors between labels and predictions.
+/// `loss = mean(square(expected - predicted))`
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
 ///   - expected: Expected values, i.e. targets, that correspond to the correct output.
 @differentiable(wrt: predicted)
 public func meanSquaredError<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>
 ) -> Tensor<Scalar> {
-    l2Loss(predicted: predicted, expected: expected, reduction: _mean)
+  l2Loss(predicted: predicted, expected: expected, reduction: _mean)
 }
 
-/// Returns the mean squared logarithmic error between predictions and expectations.
+/// Computes the mean squared logarithmic error between `predicted` and `expected`
+///  `loss = square(log(expected) - log(predicted))`
 ///
 /// - Note: Negative tensor entries will be clamped at `0` to avoid undefined
 ///   logarithmic behavior, as `log(_:)` is undefined for negative reals.
@@ -78,28 +83,31 @@ public func meanSquaredError<Scalar: TensorFlowFloatingPoint>(
 ///   - expected: Expected values, i.e. targets, that correspond to the correct output.
 @differentiable(wrt: predicted)
 public func meanSquaredLogarithmicError<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>
 ) -> Tensor<Scalar> {
-    let logPredicted = log(max(predicted, Tensor(0)) + 1)
-    let logExpected = log(max(expected, Tensor(0)) + 1)
-    return l2Loss(predicted: logPredicted, expected: logExpected, reduction: _mean)
+  let logPredicted = log(max(predicted, Tensor(0, on: predicted.device)) + 1)
+  let logExpected = log(max(expected, Tensor(0, on: expected.device)) + 1)
+  return l2Loss(predicted: logPredicted, expected: logExpected, reduction: _mean)
 }
 
-/// Returns the mean absolute percentage error between predictions and expectations.
+/// Computes the mean absolute percentage error between `predicted` and `expected`.
+///  `loss = 100 * mean(abs((expected - predicted) / abs(expected)))`
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
 ///   - expected: Expected values, i.e. targets, that correspond to the correct output.
 @differentiable(wrt: predicted)
 public func meanAbsolutePercentageError<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>
 ) -> Tensor<Scalar> {
-    100 * abs((expected - predicted) / abs(expected)).mean()
+  100 * abs((expected - predicted) / abs(expected)).mean()
 }
 
-/// Returns the hinge loss between predictions and expectations.
+/// Computes the hinge loss between `predicted` and `expected`.
+///  `loss = reduction(max(0, 1 - predicted * expected))` 
+///  `expected` values are expected to be -1 or 1.
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
@@ -107,14 +115,17 @@ public func meanAbsolutePercentageError<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: predicted)
 public func hingeLoss<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
 ) -> Tensor<Scalar> {
-    reduction(max(Tensor(0), Tensor(1) - expected * predicted))
+  let device = predicted.device
+  return reduction(max(Tensor(0, on: device), Tensor(1, on: device) - expected * predicted))
 }
 
-/// Returns the squared hinge loss between predictions and expectations.
+/// Computes the squared hinge loss between `predicted` and `expected`.
+///  `loss = reduction(square(max(0, 1 - predicted * expected)))`
+///  `expected` values are expected to be -1 or 1.
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
@@ -122,14 +133,17 @@ public func hingeLoss<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: predicted)
 public func squaredHingeLoss<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
 ) -> Tensor<Scalar> {
-    reduction(hingeLoss(predicted: predicted, expected: expected).squared())
+  reduction(hingeLoss(predicted: predicted, expected: expected).squared())
 }
 
-/// Returns the hinge loss between predictions and expectations.
+/// Computes the categorical hinge loss between `predicted` and `expected`.
+///  `loss = maximum(negative - positive + 1, 0)`
+///   where `negative = max((1 - expected) * predicted)` and 
+///  `positive = sum(predicted * expected)`
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
@@ -137,17 +151,19 @@ public func squaredHingeLoss<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: predicted)
 public func categoricalHingeLoss<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
 ) -> Tensor<Scalar> {
-    let positive = (expected * predicted).sum(alongAxes: -1)
-    let negative = ((Tensor(1) - expected) * predicted).max(alongAxes: -1)
-    return reduction(max(Tensor(0), negative - positive + Tensor(1)))
+  let device = predicted.device
+  let positive = (expected * predicted).sum(alongAxes: -1)
+  let negative = ((Tensor(1, on: device) - expected) * predicted).max(alongAxes: -1)
+  return reduction(max(Tensor(0, on: device), negative - positive + Tensor(1, on: device)))
 }
 
-/// Returns the logarithm of the hyperbolic cosine of the error between predictions and
-/// expectations.
+/// Computes the logarithm of the hyperbolic cosine of the prediction error.
+///  `logcosh = log((exp(x) + exp(-x))/2)`,
+///   where x is the error `predicted - expected`
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
@@ -155,15 +171,18 @@ public func categoricalHingeLoss<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: predicted)
 public func logCoshLoss<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
 ) -> Tensor<Scalar> {
-    let x = predicted - expected
-    return reduction(x + softplus(Tensor(-2) * x) - log(Tensor(2)))
+  let device = predicted.device
+  let x = predicted - expected
+  return reduction(x + softplus(Tensor(-2, on: device) * x) - log(Tensor(2, on: device)))
 }
 
-/// Returns the Poisson loss between predictions and expectations.
+/// Computes the Poisson loss between predicted and expected
+///  The Poisson loss is the mean of the elements of the `Tensor`
+///  `predicted - expected * log(predicted)`.
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
@@ -171,15 +190,15 @@ public func logCoshLoss<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: predicted)
 public func poissonLoss<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
 ) -> Tensor<Scalar> {
-    reduction(predicted - expected * log(predicted))
+  reduction(predicted - expected * log(predicted))
 }
 
-/// Returns the Kullback-Leibler divergence (KL divergence) between between expectations and
-/// predictions. Given two distributions `p` and `q`, KL divergence computes `p * log(p / q)`.
+/// Computes Kullback-Leibler divergence loss between `expected` and `predicted`.
+/// `loss = reduction(expected * log(expected / predicted))`
 ///
 /// - Parameters:
 ///   - predicted: Predicted outputs from a neural network.
@@ -187,14 +206,17 @@ public func poissonLoss<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: predicted)
 public func kullbackLeiblerDivergence<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _sum
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _sum
 ) -> Tensor<Scalar> {
-    reduction(expected * log(expected / predicted))
+  reduction(expected * log(expected / predicted))
 }
 
-/// Returns the softmax cross entropy (categorical cross entropy) between logits and labels.
+/// Computes the sparse softmax cross entropy (categorical cross entropy) between logits and labels.
+///  Use this crossentropy loss function when there are two or more label classes.
+///  We expect labels to be provided as integers. There should be `# classes` 
+///  floating point values per feature for `logits` and a single floating point value per feature for `expected`.
 ///
 /// - Parameters:
 ///   - logits: One-hot encoded outputs from a neural network.
@@ -202,32 +224,36 @@ public func kullbackLeiblerDivergence<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: logits)
 public func softmaxCrossEntropy<Scalar: TensorFlowFloatingPoint>(
-    logits: Tensor<Scalar>,
-    labels: Tensor<Int32>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
+  logits: Tensor<Scalar>,
+  labels: Tensor<Int32>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
 ) -> Tensor<Scalar> {
-    reduction(softmaxCrossEntropyHelper(logits: logits, labels: labels))
+  reduction(softmaxCrossEntropyHelper(logits: logits, labels: labels))
 }
 
 @inlinable
-@differentiable(wrt: logits, vjp: _vjpSoftmaxCrossEntropyHelper(logits:labels:))
+@differentiable(wrt: logits)
 func softmaxCrossEntropyHelper<Scalar: TensorFlowFloatingPoint>(
-    logits: Tensor<Scalar>,
-    labels: Tensor<Int32>
+  logits: Tensor<Scalar>,
+  labels: Tensor<Int32>
 ) -> Tensor<Scalar> {
-    _Raw.sparseSoftmaxCrossEntropyWithLogits(features: logits, labels: labels).loss
+  _Raw.sparseSoftmaxCrossEntropyWithLogits(features: logits, labels: labels).loss
 }
 
 @inlinable
+@derivative(of: softmaxCrossEntropyHelper(logits:labels:))
 func _vjpSoftmaxCrossEntropyHelper<Scalar: TensorFlowFloatingPoint>(
-    logits: Tensor<Scalar>,
-    labels: Tensor<Int32>
-) -> (Tensor<Scalar>, (Tensor<Scalar>) -> Tensor<Scalar>) {
-    let (loss, grad) = _Raw.sparseSoftmaxCrossEntropyWithLogits(features: logits, labels: labels)
-    return (loss, { $0.expandingShape(at: -1) * grad })
+  logits: Tensor<Scalar>,
+  labels: Tensor<Int32>
+) -> (value: Tensor<Scalar>, pullback: (Tensor<Scalar>) -> Tensor<Scalar>) {
+  let (loss, grad) = _Raw.sparseSoftmaxCrossEntropyWithLogits(features: logits, labels: labels)
+  return (loss, { $0.expandingShape(at: -1) * grad })
 }
 
-/// Returns the softmax cross entropy (categorical cross entropy) between logits and labels.
+/// Computes the sparse softmax cross entropy (categorical cross entropy) between logits and labels.
+///  Use this crossentropy loss function when there are two or more label classes.
+///  We expect labels to be provided provided in a `one_hot` representation. 
+///  There should be `# classes` floating point values per feature.
 ///
 /// - Parameters:
 ///   - logits: Unscaled log probabilities from a neural network.
@@ -236,35 +262,36 @@ func _vjpSoftmaxCrossEntropyHelper<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: logits)
 public func softmaxCrossEntropy<Scalar: TensorFlowFloatingPoint>(
-    logits: Tensor<Scalar>,
-    probabilities: Tensor<Scalar>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
+  logits: Tensor<Scalar>,
+  probabilities: Tensor<Scalar>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
 ) -> Tensor<Scalar> {
-    reduction(softmaxCrossEntropyHelper(logits: logits, probabilities: probabilities))
+  reduction(softmaxCrossEntropyHelper(logits: logits, probabilities: probabilities))
 }
 
 @inlinable
-@differentiable(wrt: logits, vjp: _vjpSoftmaxCrossEntropyHelper(logits:probabilities:))
+@differentiable(wrt: logits)
 func softmaxCrossEntropyHelper<Scalar: TensorFlowFloatingPoint>(
-    logits: Tensor<Scalar>,
-    probabilities: Tensor<Scalar>
+  logits: Tensor<Scalar>,
+  probabilities: Tensor<Scalar>
 ) -> Tensor<Scalar> {
-    _Raw.softmaxCrossEntropyWithLogits(features: logits, labels: probabilities).loss
+  _Raw.softmaxCrossEntropyWithLogits(features: logits, labels: probabilities).loss
 }
 
 @inlinable
+@derivative(of: softmaxCrossEntropyHelper(logits:probabilities:), wrt: logits)
 func _vjpSoftmaxCrossEntropyHelper<Scalar: TensorFlowFloatingPoint>(
-    logits: Tensor<Scalar>,
-    probabilities: Tensor<Scalar>
-) -> (Tensor<Scalar>, (Tensor<Scalar>) -> Tensor<Scalar>) {
-    let (loss, grad) = _Raw.softmaxCrossEntropyWithLogits(features: logits, labels: probabilities)
-    return (loss, { $0.expandingShape(at: -1) * grad })
+  logits: Tensor<Scalar>,
+  probabilities: Tensor<Scalar>
+) -> (value: Tensor<Scalar>, pullback: (Tensor<Scalar>) -> Tensor<Scalar>) {
+  let (loss, grad) = _Raw.softmaxCrossEntropyWithLogits(features: logits, labels: probabilities)
+  return (loss, { $0.expandingShape(at: -1) * grad })
 }
 
-/// Returns the sigmoid cross entropy (binary cross entropy) between logits and labels.
-///
-/// The reduction is reduced over all elements. If reduced over batch size is intended, please
-/// consider to scale the loss.
+/// Computes the sigmoid cross entropy (binary cross entropy) between logits and labels.
+///  Use this cross-entropy loss when there are only two label classes (assumed to
+///  be 0 and 1). For each example, there should be a single floating-point value
+///  per prediction.
 ///
 /// - Parameters:
 ///   - logits: The unscaled output of a neural network.
@@ -272,20 +299,21 @@ func _vjpSoftmaxCrossEntropyHelper<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: logits)
 public func sigmoidCrossEntropy<Scalar: TensorFlowFloatingPoint>(
-    logits: Tensor<Scalar>,
-    labels: Tensor<Scalar>,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
+  logits: Tensor<Scalar>,
+  labels: Tensor<Scalar>,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _mean
 ) -> Tensor<Scalar> {
-    // This numerically stable implementation is based on the TensorFlow Python API.
-    let maxLogitsWithZero = max(logits, Tensor(0))
-    let negAbsLogits = max(logits, -logits) // Custom `abs` to compute gradients at `0`.
-    return reduction(maxLogitsWithZero - logits * labels + log1p(exp(-negAbsLogits)))
+  let device = logits.device
+  // This numerically stable implementation is based on the TensorFlow Python API.
+  let maxLogitsWithZero = max(logits, Tensor(0, on: device))
+  let negAbsLogits = max(logits, -logits)  // Custom `abs` to compute gradients at `0`.
+  return reduction(maxLogitsWithZero - logits * labels + log1p(exp(-negAbsLogits)))
 }
 
-/// Returns the Huber loss between predictions and expectations.
+/// Computes the Huber loss between `predicted` and `expected`.
 ///
-/// For each value `x` in the difference `expected - predicted`, the loss is:
-/// - `0.5 * x^2` if `abs(x) <= δ`.
+/// For each value `x` in `error = expected - predicted`:
+/// - `0.5 * x^2` if `|x| <= δ`.
 /// - `0.5 * δ^2 + δ * (|x| - δ)` otherwise.
 ///
 /// - Source: [Wikipedia article](https://en.wikipedia.org/wiki/Huber_loss).
@@ -298,16 +326,16 @@ public func sigmoidCrossEntropy<Scalar: TensorFlowFloatingPoint>(
 ///   - reduction: Reduction to apply on the computed element-wise loss values.
 @differentiable(wrt: predicted)
 public func huberLoss<Scalar: TensorFlowFloatingPoint>(
-    predicted: Tensor<Scalar>,
-    expected: Tensor<Scalar>,
-    delta: Scalar,
-    reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _sum
+  predicted: Tensor<Scalar>,
+  expected: Tensor<Scalar>,
+  delta: Scalar,
+  reduction: @differentiable (Tensor<Scalar>) -> Tensor<Scalar> = _sum
 ) -> Tensor<Scalar> {
-    let error = expected - predicted
-    let absError = abs(error)
-    let quadratic = min(absError, delta)
-    let linear = absError - quadratic
-    return reduction((0.5 * quadratic * quadratic) + (delta * linear))
+  let error = expected - predicted
+  let absError = abs(error)
+  let quadratic = min(absError, delta)
+  let linear = absError - quadratic
+  return reduction((0.5 * quadratic * quadratic) + (delta * linear))
 }
 
 /// Workaround for TF-1030 so that we can use sum as a default argument for reductions.
@@ -315,7 +343,7 @@ public func huberLoss<Scalar: TensorFlowFloatingPoint>(
 // TODO(TF-1030): Remove this and replace with `{ $0.sum() }`.
 @differentiable
 public func _sum<Scalar: TensorFlowFloatingPoint>(
-    _ value: Tensor<Scalar>
+  _ value: Tensor<Scalar>
 ) -> Tensor<Scalar> {
   return value.sum()
 }
@@ -325,7 +353,7 @@ public func _sum<Scalar: TensorFlowFloatingPoint>(
 // TODO(TF-1030): Remove this and replace with `{ $0.mean() }`.
 @differentiable
 public func _mean<Scalar: TensorFlowFloatingPoint>(
-    _ value: Tensor<Scalar>
+  _ value: Tensor<Scalar>
 ) -> Tensor<Scalar> {
   return value.mean()
 }

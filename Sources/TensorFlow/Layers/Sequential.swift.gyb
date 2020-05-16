@@ -12,7 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// A layer that sequentially composes two other layers.
+/// A layer that sequentially composes two or more other layers.
+///
+/// ### Examples: ###
+///
+/// - Build a simple 2-layer perceptron model for MNIST:
+///
+/// ````
+/// let inputSize = 28 * 28
+/// let hiddenSize = 300
+/// var classifier = Sequential {
+///      Dense<Float>(inputSize: inputSize, outputSize: hiddenSize, activation: relu)
+///      Dense<Float>(inputSize: hiddenSize, outputSize: 3, activation: identity)
+///  }
+/// ````
+///
+/// - Build an autoencoder for MNIST:
+///
+/// ````
+/// var autoencoder = Sequential {
+///     // The encoder.
+///     Dense<Float>(inputSize: 28 * 28, outputSize: 128, activation: relu)
+///     Dense<Float>(inputSize: 128, outputSize: 64, activation: relu)
+///     Dense<Float>(inputSize: 64, outputSize: 12, activation: relu)
+///     Dense<Float>(inputSize: 12, outputSize: 3, activation: relu)
+///     // The decoder.
+///     Dense<Float>(inputSize: 3, outputSize: 12, activation: relu)
+///     Dense<Float>(inputSize: 12, outputSize: 64, activation: relu)
+///     Dense<Float>(inputSize: 64, outputSize: 128, activation: relu)
+///     Dense<Float>(inputSize: 128, outputSize: imageHeight * imageWidth, activation: tanh)
+/// }
+/// ````
 public struct Sequential<Layer1: Module, Layer2: Layer>: Module
     where Layer1.Output == Layer2.Input,
           Layer1.TangentVector.VectorSpaceScalar == Layer2.TangentVector.VectorSpaceScalar {
@@ -41,6 +71,32 @@ extension Sequential: Layer where Layer1: Layer {
     }
 }
 
+%{
+SEQUENTIAL_ARITY_RANGE = range(3, 11)
+
+def generic_parameters(arity, prefix=""):
+    params = ["L1: Module"]
+    params += ["L{}: Layer".format(i) for i in range(2, arity+1)]
+    return prefix.join(params)
+
+# Returns "Sequential<L1, Sequential<L2, ...>>".
+def sequential_type(arity):
+    return (
+        "".join(["Sequential<L{}, ".format(i) for i in range(1, n)])
+        + "L"
+        + str(arity)
+        + "".join([">" for i in range(1, n)])
+    )
+}%
+
+%for n in SEQUENTIAL_ARITY_RANGE:
+/// A layer that sequentially composes ${n} layers.
+public typealias Sequential${n}<${generic_parameters(n, ", ")}> = ${sequential_type(n)}
+  where ${", ".join(["L{}.Output == L{}.Input".format(i, i+1) for i in range(1, n)])},
+        ${", ".join(["L{}.TangentVector.VectorSpaceScalar == L{}.TangentVector.VectorSpaceScalar".format(i, i+1) for i in range(1, n)])}
+
+%end
+
 @_functionBuilder
 public struct LayerBuilder {
     public static func buildBlock<L1: Module, L2: Layer>(_ l1: L1, _ l2: L2) -> Sequential<L1, L2>
@@ -48,12 +104,11 @@ public struct LayerBuilder {
         Sequential(l1, l2)
     }
 
-    %for n in range(3, 11):
+    %for n in SEQUENTIAL_ARITY_RANGE:
     public static func buildBlock<
-        L1: Module,
-        ${",\n        ".join(["L{}: Layer".format(i) for i in range(2, n+1)])}
+        ${generic_parameters(n, prefix=",\n        ")}
     >(${", ".join(["_ l{}: L{}".format(i, i) for i in range(1, n+1)])})
-        -> ${"".join(["Sequential<L{}, ".format(i) for i in range(1, n)])}L${n}${"".join([">" for i in range(1, n)])} where
+        -> ${sequential_type(n)} where
         ${",\n        ".join(["L{}.Output == L{}.Input".format(i, i+1)
                           for i in range(1, n)])},
         ${",\n        ".join(["L{}.TangentVector.VectorSpaceScalar == ".format(i) +
